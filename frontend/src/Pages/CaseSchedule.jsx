@@ -24,7 +24,7 @@ function CaseSchedule() {
             const token = localStorage.getItem("token");
             const{caseId, hearingDate, scheduledTime } = formData;
             const formattedHearingDate = `${hearingDate}T${scheduledTime}:00Z`
-            const response = await fetch(`http://localhost:5000/api/cases/assign-hearing/${caseId}`, {
+            const response = await fetch(`http://backend-production-969c.up.railway.app/api/cases/assign-hearing/${caseId}`, {
                 method: "PUT",
                 headers: {
                     "Content-Type": "application/json",
