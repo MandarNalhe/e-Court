@@ -9,7 +9,7 @@ const register = ()=>{
     const [otp, setOTP] = useState(false);
     const handleOTP = async () => {
       try {
-        const response = await fetch("http://backend-production-969c.up.railway.app/api/otp/send-otp", {
+        const response = await fetch("http://backend-production-969c.up.railway.app:5000/api/otp/send-otp", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(loginData),
