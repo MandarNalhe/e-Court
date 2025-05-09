@@ -1,186 +1,151 @@
-import { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
-import { io } from "socket.io-client";
+import React, { useRef, useState, useEffect } from "react";
+import io from "socket.io-client";
 
-// Connect to signaling server (make sure to update the URL if needed)
-const socket = io("https://backend-production-969c.up.railway.app");
+const socket = io("http://localhost:5000");
 
-function VideoCall() {
-  const { roomId } = useParams(); // Extract roomId from URL
-  const [userStream, setUserStream] = useState(null);
-  const [peerConnections, setPeerConnections] = useState({});
-  const videoRef = useRef(null); // Ref to display local video
-  const remoteVideoContainerRef = useRef(null); // Ref to hold remote video elements
+const VideoCallPage = () => {
+  const localVideoRef = useRef(null);
+  const remoteVideoRef = useRef(null);
+  const peerRef = useRef(null);
+  const [inCall, setInCall] = useState(false);
+  const [roomId, setRoomId] = useState("test-room");
+  const [localStream, setLocalStream] = useState(null);
 
   useEffect(() => {
-    if (roomId) {
-      socket.emit("join-room", roomId, socket.id); // Join the room using roomId and socket ID
-    }
-
-    socket.on("user-connected", (userId) => {
-      console.log("New user joined:", userId);
-      if (userStream) {
-        createPeerConnection(userId); // Create peer connection only if userStream is available
-      }
+    socket.on("user-connected", async (userId) => {
+      console.log("User connected:", userId);
+      await createOffer(userId);
     });
 
-    socket.on("offer", handleOffer);
-    socket.on("answer", handleAnswer);
-    socket.on("ice-candidate", handleIceCandidate);
+    socket.on("offer", async ({ from, offer }) => {
+       console.log("Offer received from:", from);
+      await handleOffer(from, offer);
+    });
+
+    socket.on("answer", async ({ from, answer }) => {
+      console.log("Answer received from:", from);
+      await peerRef.current.setRemoteDescription(new RTCSessionDescription(answer));
+    });
+
+    socket.on("ice-candidate", ({ from, candidate }) => {
+      console.log("ICE Candidate received from:", from);
+      peerRef.current?.addIceCandidate(new RTCIceCandidate(candidate));
+    });
 
     return () => {
       socket.disconnect();
-      if (userStream) {
-        userStream.getTracks().forEach(track => track.stop()); // Stop local media tracks on unmount
-      }
     };
-  }, [roomId, userStream]); // Include userStream as a dependency to react to stream changes
+  }, []);
 
-  const startCall = async () => {
+  const joinCall = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      setUserStream(stream); // Store the local user stream
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream; // Display local video in the UI
+      setLocalStream(stream);
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = stream;
       }
 
-      socket.emit("join-room", roomId, socket.id); // Notify others that user has joined the room
-    } catch (error) {
-      console.error("Error accessing media devices.", error);
+      socket.emit("join-room", roomId);
+      setupPeer(stream);
+      setInCall(true);
+    } catch (err) {
+      console.error("Error accessing camera/microphone:", err);
     }
   };
 
-  const createPeerConnection = (userId) => {
-    if (!userStream) {
-      console.error("User stream is not available.");
-      return;
+  const leaveCall = () => {
+    if (peerRef.current) {
+      peerRef.current.close();
+      peerRef.current = null;
     }
 
-    const pc = new RTCPeerConnection();
-    const localStream = userStream;
+    if (localVideoRef.current?.srcObject) {
+      localVideoRef.current.srcObject.getTracks().forEach((track) => track.stop());
+    }
 
-    // Add local tracks to the peer connection
-    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+    if (remoteVideoRef.current?.srcObject) {
+      remoteVideoRef.current.srcObject.getTracks().forEach((track) => track.stop());
+      remoteVideoRef.current.srcObject = null;
+    }
+
+    setInCall(false);
+  };
+
+  const setupPeer = (stream) => {
+    const pc = new RTCPeerConnection();
+    peerRef.current = pc;
+
+    stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        socket.emit("ice-candidate", { to: userId, candidate: event.candidate });
+        socket.emit("ice-candidate", {
+          to: roomId,
+          candidate: event.candidate,
+        });
       }
     };
 
     pc.ontrack = (event) => {
-      const remoteStream = event.streams[0];
-      displayRemoteStream(remoteStream, userId); // Display the remote stream
-    };
-
-    setPeerConnections((prev) => ({
-      ...prev,
-      [userId]: pc,
-    }));
-
-    createOffer(pc, userId); // Start the offer process with the new peer
-  };
-
-  const createOffer = async (pc, userId) => {
-    try {
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      socket.emit("offer", { to: userId, offer });
-    } catch (error) {
-      console.error("Error creating offer:", error);
-    }
-  };
-
-  const handleOffer = async ({ from, offer }) => {
-    const pc = new RTCPeerConnection();
-    const localStream = userStream;
-
-    // Add local tracks to the peer connection
-    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-
-    pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        socket.emit("ice-candidate", { to: from, candidate: event.candidate });
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = event.streams[0];
       }
     };
-
-    pc.ontrack = (event) => {
-      const remoteStream = event.streams[0];
-      displayRemoteStream(remoteStream, from); // Display the remote stream
-    };
-
-    try {
-      await pc.setRemoteDescription(new RTCSessionDescription(offer));
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-
-      socket.emit("answer", { to: from, answer });
-    } catch (error) {
-      console.error("Error handling offer:", error);
-    }
-
-    setPeerConnections((prev) => ({
-      ...prev,
-      [from]: pc,
-    }));
   };
 
-  const handleAnswer = async ({ from, answer }) => {
-    const pc = peerConnections[from];
-    if (pc) {
-      await pc.setRemoteDescription(new RTCSessionDescription(answer));
-    }
+  const createOffer = async (toUserId) => {
+    const pc = peerRef.current;
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    socket.emit("offer", {
+      to: toUserId,
+      offer,
+    });
   };
 
-  const handleIceCandidate = ({ from, candidate }) => {
-    const pc = peerConnections[from];
-    if (pc) {
-      pc.addIceCandidate(new RTCIceCandidate(candidate));
-    }
-  };
-
-  const displayRemoteStream = (remoteStream, userId) => {
-    const videoElement = document.createElement("video");
-    videoElement.autoplay = true;
-    videoElement.playsInline = true;
-    videoElement.srcObject = remoteStream;
-
-    remoteVideoContainerRef.current.appendChild(videoElement); // Append video to container
+  const handleOffer = async (from, offer) => {
+    const pc = peerRef.current;
+    await pc.setRemoteDescription(new RTCSessionDescription(offer));
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    socket.emit("answer", {
+      to: from,
+      answer,
+    });
   };
 
   return (
-    <div className="flex flex-col items-center justify-center p-6 bg-gray-800 h-screen text-white">
-      <h2 className="text-2xl font-semibold mb-4">Video Call Room: {roomId}</h2>
-      <div className="flex space-x-6 mb-6">
+    <div style={{ textAlign: "center", padding: "20px" }}>
+      <h2>Video Call Room</h2>
+      <div style={{ display: "flex", justifyContent: "center", gap: "30px" }}>
         <div>
-          <h3>Your Video</h3>
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            className="w-80 h-60 border-2 border-gray-600 rounded"
-          />
+          <h4>Your Video</h4>
+          <video ref={localVideoRef} autoPlay playsInline muted width="300" />
         </div>
         <div>
-          <h3>Remote Videos</h3>
-          <div
-            ref={remoteVideoContainerRef}
-            className="grid grid-cols-2 gap-4"
-          >
-            {/* Remote videos will be appended here */}
-          </div>
+          <h4>Remote Video</h4>
+          <video ref={remoteVideoRef} autoPlay playsInline width="300" />
         </div>
       </div>
-      <button
-        onClick={startCall}
-        className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-lg shadow-md"
-      >
-        Start Call
-      </button>
+
+      {!inCall ? (
+        <button onClick={joinCall} style={btnStyle}>Join Call</button>
+      ) : (
+        <button onClick={leaveCall} style={{ ...btnStyle, background: "crimson" }}>Leave Call</button>
+      )}
     </div>
   );
-}
+};
 
-export default VideoCall;
+const btnStyle = {
+  marginTop: "20px",
+  padding: "10px 20px",
+  fontSize: "16px",
+  cursor: "pointer",
+  background: "#007bff",
+  color: "white",
+  border: "none",
+  borderRadius: "8px",
+};
+
+export default VideoCallPage;
