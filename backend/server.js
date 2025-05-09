@@ -9,7 +9,7 @@ const app = express();
 const server = http.createServer(app); // Create an HTTP server instance
 const io = new Server(server, {
   cors: {
-    origin: ["http://localhost:3000", "http://localhost:5173"],// Allow frontend to connect
+    origin: ["https://frontend-production-cd40.up.railway.app"],// Allow frontend to connect
     methods: ["GET", "POST"]
   }
 });
