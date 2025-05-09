@@ -8,7 +8,7 @@ import logo from "../assets/logo.png";
 import { useNavigate } from "react-router-dom";
 import { io } from "socket.io-client";
 const Dashboard = () => {
-  const socket = io("http://localhost:5000"); // Adjust the backend URL accordingly
+  const socket = io("https://backend-production-969c.up.railway.app"); // Adjust the backend URL accordingly
   const navigate = useNavigate();
   const people =[
     {
@@ -34,7 +34,7 @@ const Dashboard = () => {
   const getCases = async() =>{
     try{
       const token = localStorage.getItem("token")
-    const response = await fetch("http://localhost:5000/api/cases/",{
+    const response = await fetch("https://backend-production-969c.up.railway.app/api/cases/",{
       method: "GET",
       headers : {"Content-Type" : "application/json",
                   "Authorization" : `Bearer ${token}`
