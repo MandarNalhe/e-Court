@@ -9,7 +9,7 @@ const app = express();
 const server = http.createServer(app); // Create an HTTP server instance
 const io = new Server(server, {
   cors: {
-    origin: ["https://frontend-production-cd40.up.railway.app"],// Allow frontend to connect
+    origin: ["http://localhost:3000", "http://localhost:5173"],// Allow frontend to connect
     methods: ["GET", "POST"]
   }
 });
@@ -21,40 +21,55 @@ app.use(express.json());
 // 🔹 WebSocket (Socket.IO) Implementation
 const rooms = {};
 
-io.on('connection', (socket) => {
+io.on("connection", (socket) => {
   console.log(`User connected: ${socket.id}`);
 
-  // Handle "start-call" event to create a room
-  socket.on('start-call', (callback) => {
-    const roomId = `room-${Date.now()}`;
-    rooms[roomId] = [];
-    console.log(`Room created: ${roomId}`);
-
+  // Create a room
+ // Server-side code (backend/server.js)
+socket.on("start-call", (callback) => {
+  const roomId = `room-${Date.now()}`;
+  rooms[roomId] = [];
+  console.log(`Room created: ${roomId}`);
+  
+  if (typeof callback === "function") {
     callback(roomId); // Send the room ID back to the frontend
-  });
+  } else {
+    console.error('Callback is not a function!');
+  }
+});;
 
-  // Handle users joining a room
-  socket.on('join-room', (roomId, userId) => {
+  // Join room
+  socket.on("join-room", (roomId) => {
     socket.join(roomId);
-    rooms[roomId].push(userId);
-    io.to(roomId).emit('user-connected', userId);
+    if (!rooms[roomId]) rooms[roomId] = [];
+    rooms[roomId].push(socket.id);
+
+    socket.to(roomId).emit("user-connected", socket.id); // Notify others in the room
   });
 
-  // Handle WebRTC signaling
-  socket.on('send-signal', (signalData) => {
-    io.to(signalData.userId).emit('receive-signal', signalData);
+  // WebRTC Signaling
+
+  socket.on("offer", ({ to, offer }) => {
+    console.log(`Emitting offer to ${to}`, offer);
+    io.to(to).emit("offer", { from: socket.id, offer });
   });
 
-  // Handle disconnection
-  socket.on('disconnect', () => {
+  socket.on("answer", ({ to, answer }) => {
+    console.log(`Emitting answer to ${to}`, answer);
+    io.to(to).emit("answer", { from: socket.id, answer });
+  });
+
+  socket.on("ice-candidate", ({ to, candidate }) => {
+    console.log(`Emitting ICE candidate to ${to}`, candidate);
+    io.to(to).emit("ice-candidate", { from: socket.id, candidate });
+  });
+
+  socket.on("disconnect", () => {
     console.log(`User disconnected: ${socket.id}`);
+    // Optional: remove from rooms[roomId] if needed
   });
 });
 
-// ✅ Add Express Routes if needed
-app.get("/", (req, res) => {
-  res.send("Video Call Backend Running");
-});
 
 // Import Routes
 const authRoutes = require('./routes/authRoutes');
@@ -69,9 +84,6 @@ app.use('/api/otp', otpRoutes); // OTP Routes
 app.use('/api/cases', caseRoutes);
 
 // Connect to MongoDB
-console.log("Connecting to:", process.env.MONGO_URI); 
-console.log("Connecting to:", process.env.PORT);
-
 mongoose
   .connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
   .then(() => console.log('MongoDB Connected'))
