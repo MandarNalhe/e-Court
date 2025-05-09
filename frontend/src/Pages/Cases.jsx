@@ -15,7 +15,7 @@ function Cases(){
     },[])
     const fetchCases = async()=>{
         try{
-            const response = await fetch("http://localhost:5000/api/cases",{
+            const response = await fetch("https://backend-production-969c.up.railway.app/api/cases",{
                 headers:{
                     "Authorization" : `Bearer ${token}`
                 }
