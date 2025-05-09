@@ -18,7 +18,7 @@ function CaseRegister() {
         // send the data to the server here
         try {
             const token = localStorage.getItem("token")
-            const response = await fetch("http://localhost:5000/api/cases/register", {
+            const response = await fetch("https://backend-production-969c.up.railway.app/api/cases/register", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
