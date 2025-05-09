@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import { io } from "socket.io-client";
 
 // Connect to signaling server (make sure to update the URL if needed)
-const socket = io("http://localhost:5000");
+const socket = io("https://backend-production-969c.up.railway.app");
 
 function VideoCall() {
   const { roomId } = useParams(); // Extract roomId from URL
