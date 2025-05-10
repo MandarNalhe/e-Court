@@ -115,7 +115,7 @@ const Dashboard = () => {
          {cases.length>2 && <LiveCase cases={cases[2]}/>}
         </div>
         <div>
-          {cases.length>3 && cases[cases.length-1].hearingDate != null <UpcomingCases cases={cases[cases.length -1 ]}/>}
+          {cases.length>3 && cases[cases.length-1].hearingDate != null && <UpcomingCases cases={cases[cases.length -1 ]}/>}
         </div>
         <button onClick={handleVideo} className="rounded-lg bg-[#48289c] text-2xl font-bold p-8 w-[100%]">Start Session</button> 
       </div>
